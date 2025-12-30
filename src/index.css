@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.logo {
+  border-radius: 50%;
+  overflow: hidden;
+}
+.logo img {
+  border-radius: 50%;
+}
