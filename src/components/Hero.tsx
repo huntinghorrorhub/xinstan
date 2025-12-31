@@ -28,10 +28,43 @@ export default function Hero({ heading, subheading, placeholder }: HeroProps) {
 
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/instagram-download`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({ url: url.trim() }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert('Error: ' + (data.error || 'Failed to download'));
+        return;
+      }
+
+      if (data.download_url || data.url) {
+        const downloadUrl = data.download_url || data.url;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = 'instagram_content';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    } catch (error) {
+      alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
       setLoading(false);
-      alert('Download functionality will be implemented with backend API');
-    }, 2000);
+    }
   };
 
   return (
