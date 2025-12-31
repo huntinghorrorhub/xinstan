@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Clipboard, Download, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Clipboard, Download, Loader2, AlertCircle, Check } from 'lucide-react';
+import { useDownload } from '../hooks/useDownload';
 
 interface HeroProps {
   heading: string;
@@ -9,7 +10,15 @@ interface HeroProps {
 
 export default function Hero({ heading, subheading, placeholder }: HeroProps) {
   const [url, setUrl] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { download, verifyCaptcha, fetchSessionStatus, loading, error, requiresCaptcha, sessionStatus } = useDownload();
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  useEffect(() => {
+    fetchSessionStatus();
+    const interval = setInterval(fetchSessionStatus, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [fetchSessionStatus]);
 
   const handlePaste = async () => {
     try {
@@ -26,44 +35,22 @@ export default function Hero({ heading, subheading, placeholder }: HeroProps) {
       return;
     }
 
-    setLoading(true);
+    setShowSuccess(false);
+    await download(url.trim());
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
+  };
 
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const handleCaptchaSubmit = async () => {
+    if (!captchaToken) {
+      alert('Please enter a CAPTCHA token');
+      return;
+    }
 
-      const response = await fetch(
-        `${supabaseUrl}/functions/v1/instagram-download`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${anonKey}`,
-          },
-          body: JSON.stringify({ url: url.trim() }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        alert('Error: ' + (data.error || 'Failed to download'));
-        return;
-      }
-
-      if (data.download_url || data.url) {
-        const downloadUrl = data.download_url || data.url;
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = 'instagram_content';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }
-    } catch (error) {
-      alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      setLoading(false);
+    const verified = await verifyCaptcha(captchaToken);
+    if (verified) {
+      setCaptchaToken('');
+      await download(url.trim());
     }
   };
 
@@ -78,47 +65,90 @@ export default function Hero({ heading, subheading, placeholder }: HeroProps) {
         </p>
 
         <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="flex-1 relative">
+          {requiresCaptcha ? (
+            <div className="space-y-4">
+              <p className="text-gray-700 font-medium">Security Verification Required</p>
               <input
                 type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder={placeholder}
-                className="w-full px-6 py-4 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:outline-none text-gray-700 transition-colors"
+                value={captchaToken}
+                onChange={(e) => setCaptchaToken(e.target.value)}
+                placeholder="Enter CAPTCHA token or solve the challenge..."
+                className="w-full px-6 py-4 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:outline-none text-gray-700"
               />
-            </div>
-            <div className="flex gap-3">
               <button
-                onClick={handlePaste}
-                className="flex items-center justify-center gap-2 px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
+                onClick={handleCaptchaSubmit}
+                disabled={loading || !captchaToken}
+                className="w-full px-8 py-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg transition-all disabled:opacity-50"
               >
-                <Clipboard className="h-5 w-5" />
-                <span className="hidden sm:inline">Paste</span>
-              </button>
-              <button
-                onClick={handleDownload}
-                disabled={loading}
-                className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Processing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-5 w-5" />
-                    <span>Download</span>
-                  </>
-                )}
+                Verify & Continue
               </button>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder={placeholder}
+                    className="w-full px-6 py-4 rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:outline-none text-gray-700 transition-colors"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handlePaste}
+                    className="flex items-center justify-center gap-2 px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
+                  >
+                    <Clipboard className="h-5 w-5" />
+                    <span className="hidden sm:inline">Paste</span>
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    disabled={loading}
+                    className="flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-5 w-5" />
+                        <span>Download</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
 
-          <p className="text-xs text-gray-500 mt-4 text-left">
-            Paste any Instagram URL - works with posts, reels, stories, and more
-          </p>
+              <p className="text-xs text-gray-500 mt-4 text-left">
+                Paste any Instagram URL - works with posts, reels, stories, and more
+              </p>
+            </>
+          )}
+
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
+          {showSuccess && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+              <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-green-700">Download started successfully!</p>
+            </div>
+          )}
+
+          {sessionStatus && (
+            <div className="mt-4 pt-4 border-t text-xs text-gray-500 space-y-1">
+              <p>Daily bandwidth: {sessionStatus.bandwidthUsed}/{sessionStatus.bandwidthLimit} MB</p>
+              <p>Session security score: {sessionStatus.suspiciousScore}/100</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
