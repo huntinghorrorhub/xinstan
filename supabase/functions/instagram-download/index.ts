@@ -1,17 +1,15 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -19,65 +17,56 @@ Deno.serve(async (req: Request) => {
 
     if (!url) {
       return new Response(
-        JSON.stringify({ error: "URL is required" }),
-        {
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ error: 'Instagram URL is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const apiKey = Deno.env.get("RAPIDAPI_KEY");
-    const apiHost = Deno.env.get("RAPIDAPI_HOST");
+    console.log('Processing Instagram URL:', url);
 
-    if (!apiKey || !apiHost) {
+    const rapidApiKey = Deno.env.get('RAPIDAPI_KEY');
+    
+    if (!rapidApiKey) {
+      console.error('RAPIDAPI_KEY not found');
       return new Response(
-        JSON.stringify({ error: "API credentials not configured" }),
-        {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
+        JSON.stringify({ error: 'API key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const response = await fetch(
-      "https://instagram-downloader38.p.rapidapi.com/download",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-rapidapi-key": apiKey,
-          "x-rapidapi-host": apiHost,
-        },
-        body: JSON.stringify({ url }),
+    const apiUrl = `https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert?url=${encodeURIComponent(url)}`;
+    
+    console.log('Calling RapidAPI:', apiUrl);
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'x-rapidapi-key': rapidApiKey,
+        'x-rapidapi-host': 'instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com'
       }
-    );
+    });
 
     const data = await response.json();
+    console.log('API Response:', JSON.stringify(data));
 
-    return new Response(JSON.stringify(data), {
-      status: response.status,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
-      },
-    });
-  } catch (error) {
+    if (!response.ok) {
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch from Instagram', details: data }),
+        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
+      JSON.stringify(data),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('Error in instagram-download function:', error);
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
