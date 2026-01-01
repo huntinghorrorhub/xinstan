@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import axios from 'axios';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -52,7 +53,7 @@ declare global {
 const app = express();
 const PORT = process.env.PORT || 3000;
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
-const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || 'instagram-downloader38.p.rapidapi.com';
+const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || 'instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com';
 const SESSION_COOKIE_NAME = '__session_id';
 const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
@@ -150,6 +151,7 @@ function logDownloadRequest(sessionData: SessionData, url: string, size: number)
 
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
@@ -403,28 +405,30 @@ app.post('/api/download', async (req: Request, res: Response) => {
   sessionData.downloadStartedAt = Date.now();
 
   try {
-    // Proxy request to RapidAPI
+    // Proxy request to RapidAPI (using GET method with params)
     const response = await axios.request({
-      method: 'POST',
-      url: `https://${RAPIDAPI_HOST}/download`,
+      method: 'GET',
+      url: `https://${RAPIDAPI_HOST}/convert`,
       headers: {
-        'Content-Type': 'application/json',
         'x-rapidapi-key': RAPIDAPI_KEY,
         'x-rapidapi-host': RAPIDAPI_HOST,
       },
-      data: { url },
+      params: { url },
       timeout: DOWNLOAD_TIMEOUT,
     });
 
     const data = response.data;
 
-    // Validate response
-    if (!data.download_url && !data.url) {
+    // Validate response - the new API returns different structure
+    if (!data || (!data.download && !data.video && !data.image)) {
       incrementSuspiciousScore(sessionData, 3, 'Failed download attempt');
       return res.status(400).json({ error: 'Could not extract media from this Instagram link' });
     }
 
-    const downloadUrl = data.download_url || data.url;
+    // Extract download URL and thumbnail from response
+    const downloadUrl = data.download || data.video || data.image;
+    const thumbnail = data.thumbnail || data.image;
+    const mediaType = data.type || (data.video ? 'video' : 'image');
     const estimatedSizeMB = data.size_mb || 50; // Estimate if not provided
 
     // Check file size limit
@@ -441,10 +445,12 @@ app.post('/api/download', async (req: Request, res: Response) => {
     // Log download for compliance
     logDownloadRequest(sessionData, url, estimatedSizeMB);
 
-    // Success: return download URL
+    // Success: return download URL and preview data
     res.json({
       success: true,
       download_url: downloadUrl,
+      thumbnail: thumbnail,
+      media_type: mediaType,
       size_mb: estimatedSizeMB,
       expires_in_seconds: 3600,
     });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clipboard, Download, Loader2, AlertCircle, Check } from 'lucide-react';
+import { Clipboard, Download, Loader2, AlertCircle, Check, X, Play } from 'lucide-react';
 import { useDownload } from '../hooks/useDownload';
 
 interface HeroProps {
@@ -10,7 +10,7 @@ interface HeroProps {
 
 export default function Hero({ heading, subheading, placeholder }: HeroProps) {
   const [url, setUrl] = useState('');
-  const { download, verifyCaptcha, fetchSessionStatus, loading, error, requiresCaptcha, sessionStatus } = useDownload();
+  const { download, verifyCaptcha, fetchSessionStatus, downloadMedia, clearPreview, loading, error, requiresCaptcha, sessionStatus, mediaPreview } = useDownload();
   const [captchaToken, setCaptchaToken] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -36,9 +36,23 @@ export default function Hero({ heading, subheading, placeholder }: HeroProps) {
     }
 
     setShowSuccess(false);
-    await download(url.trim());
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+    const success = await download(url.trim());
+    if (success) {
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    }
+  };
+
+  const handleDirectDownload = () => {
+    if (mediaPreview) {
+      downloadMedia(mediaPreview.downloadUrl);
+      clearPreview();
+      setUrl('');
+    }
+  };
+
+  const handleClosePreview = () => {
+    clearPreview();
   };
 
   const handleCaptchaSubmit = async () => {
@@ -150,6 +164,74 @@ export default function Hero({ heading, subheading, placeholder }: HeroProps) {
             </div>
           )}
         </div>
+
+        {mediaPreview && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
+              <button
+                onClick={handleClosePreview}
+                className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors z-10"
+              >
+                <X className="h-5 w-5 text-gray-700" />
+              </button>
+
+              <div className="p-6">
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Preview & Download</h3>
+
+                <div className="mb-6 rounded-xl overflow-hidden bg-gray-100 relative">
+                  {mediaPreview.mediaType === 'video' ? (
+                    <div className="relative">
+                      <video
+                        src={mediaPreview.downloadUrl}
+                        controls
+                        className="w-full max-h-96 object-contain"
+                        poster={mediaPreview.thumbnail}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <Play className="h-16 w-16 text-white opacity-50" />
+                      </div>
+                    </div>
+                  ) : (
+                    <img
+                      src={mediaPreview.thumbnail}
+                      alt="Instagram content preview"
+                      className="w-full max-h-96 object-contain"
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Type:</span>
+                    <span className="font-medium text-gray-900 capitalize">{mediaPreview.mediaType}</span>
+                  </div>
+                  {mediaPreview.sizeMB > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Size:</span>
+                      <span className="font-medium text-gray-900">{mediaPreview.sizeMB.toFixed(2)} MB</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleClosePreview}
+                    className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDirectDownload}
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
+                  >
+                    <Download className="h-5 w-5" />
+                    <span>Download Now</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

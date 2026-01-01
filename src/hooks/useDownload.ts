@@ -4,6 +4,8 @@ interface DownloadResponse {
   success?: boolean;
   download_url?: string;
   url?: string;
+  thumbnail?: string;
+  media_type?: string;
   size_mb?: number;
   error?: string;
   requiresCaptcha?: boolean;
@@ -11,11 +13,19 @@ interface DownloadResponse {
   unblockTime?: number;
 }
 
+interface MediaPreview {
+  downloadUrl: string;
+  thumbnail: string;
+  mediaType: string;
+  sizeMB: number;
+}
+
 export function useDownload() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requiresCaptcha, setRequiresCaptcha] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<any>(null);
+  const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
 
   const download = async (url: string, captchaToken?: string) => {
     setLoading(true);
@@ -59,16 +69,21 @@ export function useDownload() {
 
       if (data.download_url || data.url) {
         const downloadUrl = data.download_url || data.url;
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = 'instagram_content';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+
+        // Set media preview data
+        setMediaPreview({
+          downloadUrl: downloadUrl,
+          thumbnail: data.thumbnail || downloadUrl,
+          mediaType: data.media_type || 'image',
+          sizeMB: data.size_mb || 0,
+        });
+
+        // Fetch updated session status
+        await fetchSessionStatus();
+        return true;
       }
 
-      // Fetch updated session status
-      await fetchSessionStatus();
+      return false;
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Failed to process download'
@@ -125,13 +140,30 @@ export function useDownload() {
     }
   };
 
+  const clearPreview = () => {
+    setMediaPreview(null);
+  };
+
+  const downloadMedia = (url: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'instagram_content';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   return {
     download,
     verifyCaptcha,
     fetchSessionStatus,
+    downloadMedia,
+    clearPreview,
     loading,
     error,
     requiresCaptcha,
     sessionStatus,
+    mediaPreview,
   };
 }
